@@ -127,6 +127,7 @@ impl MulAssign<Mat4> for Mat4 {
     }
 }
 
+#[allow(clippy::suspicious_arithmetic_impl)]
 impl Mul<Vec4> for Mat4 {
     type Output = Vec4;
 
