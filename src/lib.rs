@@ -51,7 +51,7 @@ pub enum MatrixMode {
 const NUM_MATRIX_MODES: usize = 2;
 
 #[repr(u32)]
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub enum PrimitiveMode {
     #[default]
     Points,
@@ -364,17 +364,10 @@ pub extern "system" fn glBegin(mode: PrimitiveMode) {
 pub extern "system" fn glEnd() {
     GL_STATE.with(|state| {
         let state = &mut *state.borrow_mut();
+        let fb = state.fb.as_mut().unwrap();
+        let verts = &mut state.current_primitive.vertices;
 
-        // match state.current_primitive.mode {
-        //     PrimitiveMode::Quads => todo!(),
-        //     PrimitiveMode::Triangles => todo!(),
-        //     PrimitiveMode::TriangleStrip => todo!(),
-        //     PrimitiveMode::TriangleFan => todo!(),
-        //     PrimitiveMode::Polygon => todo!()
-        //     _ => todo!(),
-        // }
-
-        for vert in &mut state.current_primitive.vertices {
+        for vert in verts.iter_mut() {
             *vert = *state.matrix_stacks[MatrixMode::Projection as usize]
                 .last()
                 .unwrap()
@@ -383,7 +376,6 @@ pub extern "system" fn glEnd() {
                     .unwrap()
                 * *vert;
 
-            // perspective divide
             if vert.w > 0.0 {
                 vert.x /= vert.w;
                 vert.y /= vert.w;
@@ -394,20 +386,35 @@ pub extern "system" fn glEnd() {
             vert.y = (vert.y + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
         }
 
-        let verts = &state.current_primitive.vertices;
-        for i in 0..verts.len() {
-            let j = (i + 1) % verts.len();
-
-            // world's shittiest clipping algorithm
-            if verts[i].w <= 0.1 || verts[j].w <= 0.1 {
-                continue;
+        match state.current_primitive.mode {
+            PrimitiveMode::Triangles => {
+                for i in (0..verts.len()).step_by(3) {
+                    let tri = &verts[i..i + 3];
+                    fb.draw_triangle([tri[0], tri[1], tri[2]])
+                }
             }
-
-            state
-                .fb
-                .as_mut()
-                .unwrap()
-                .draw_line(verts[i].x, verts[i].y, verts[j].x, verts[j].y);
+            PrimitiveMode::Quads => {
+                for i in (0..verts.len()).step_by(4) {
+                    let quad = &verts[i..i + 4];
+                    fb.draw_triangle([quad[0], quad[1], quad[2]]);
+                    fb.draw_triangle([quad[2], quad[3], quad[0]]);
+                }
+            }
+            PrimitiveMode::TriangleStrip => {
+                for i in 0..verts.len() - 2 {
+                    if i % 2 == 0 {
+                        fb.draw_triangle([verts[i], verts[i + 1], verts[i + 2]]);
+                    } else {
+                        fb.draw_triangle([verts[i + 1], verts[i], verts[i + 2]]);
+                    }
+                }
+            }
+            PrimitiveMode::TriangleFan | PrimitiveMode::Polygon => {
+                for i in 1..verts.len() - 1 {
+                    fb.draw_triangle([verts[0], verts[i], verts[i + 1]]);
+                }
+            }
+            _ => todo!(),
         }
     })
 }

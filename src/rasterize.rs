@@ -1,3 +1,5 @@
+use crate::math::Vec4;
+
 pub struct Framebuffer {
     pub width: usize,
     pub height: usize,
@@ -49,5 +51,15 @@ impl Framebuffer {
                 x += (ex - sx) / (ey - sy);
             }
         }
+    }
+
+    pub fn draw_triangle(&mut self, verts: [Vec4; 3]) {
+        // for now just skip anything that isn't completely in front of the camera
+        if verts.iter().any(|vert| vert.w <= 0.1) {
+            return;
+        }
+        self.draw_line(verts[0].x, verts[0].y, verts[1].x, verts[1].y);
+        self.draw_line(verts[1].x, verts[1].y, verts[2].x, verts[2].y);
+        self.draw_line(verts[2].x, verts[2].y, verts[0].x, verts[0].y);
     }
 }
