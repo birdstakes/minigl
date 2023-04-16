@@ -384,14 +384,14 @@ pub extern "system" fn glEnd() {
                 * *vert;
 
             // perspective divide
-            if vert.0[3] > 0.0 {
-                vert.0[0] /= vert.0[3];
-                vert.0[1] /= vert.0[3];
-                vert.0[2] /= vert.0[3];
+            if vert.w > 0.0 {
+                vert.x /= vert.w;
+                vert.y /= vert.w;
+                vert.z /= vert.w;
             }
 
-            vert.0[0] = (vert.0[0] + 1.0) * state.viewport.width * 0.5 + state.viewport.x;
-            vert.0[1] = (vert.0[1] + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
+            vert.x = (vert.x + 1.0) * state.viewport.width * 0.5 + state.viewport.x;
+            vert.y = (vert.y + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
         }
 
         let verts = &state.current_primitive.vertices;
@@ -399,16 +399,15 @@ pub extern "system" fn glEnd() {
             let j = (i + 1) % verts.len();
 
             // world's shittiest clipping algorithm
-            if verts[i].0[3] <= 0.1 || verts[j].0[3] <= 0.1 {
+            if verts[i].w <= 0.1 || verts[j].w <= 0.1 {
                 continue;
             }
 
-            state.fb.as_mut().unwrap().draw_line(
-                verts[i].0[0],
-                verts[i].0[1],
-                verts[j].0[0],
-                verts[j].0[1],
-            );
+            state
+                .fb
+                .as_mut()
+                .unwrap()
+                .draw_line(verts[i].x, verts[i].y, verts[j].x, verts[j].y);
         }
     })
 }
