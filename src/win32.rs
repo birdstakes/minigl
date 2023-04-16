@@ -40,11 +40,14 @@ pub const BI_RGB: u32 = 0;
 pub const DIB_RGB_COLORS: u32 = 0;
 pub const SRCCOPY: u32 = 0x00CC0020;
 
-#[link(name = "gdi32")]
+#[link(name = "user32")]
 extern "system" {
     pub fn WindowFromDC(hdc: HDC) -> HWND;
     pub fn GetClientRect(hwnd: HWND, rect: *mut RECT) -> BOOL;
+}
 
+#[link(name = "gdi32")]
+extern "system" {
     pub fn StretchDIBits(
         hdc: HDC,
         x_dest: i32,
