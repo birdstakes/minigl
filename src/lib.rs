@@ -7,6 +7,18 @@ use std::{cell::RefCell, ffi::c_void};
 use math::{Mat4, Vec3, Vec4};
 use rasterize::Framebuffer;
 
+type GLenum = std::ffi::c_uint;
+type GLboolean = std::ffi::c_uchar;
+type GLbitfield = std::ffi::c_uint;
+type GLint = std::ffi::c_int;
+type GLsizei = std::ffi::c_int;
+type GLubyte = std::ffi::c_uchar;
+type GLuint = std::ffi::c_uint;
+type GLfloat = std::ffi::c_float;
+type GLclampf = std::ffi::c_float;
+type GLdouble = std::ffi::c_double;
+type GLvoid = std::ffi::c_void;
+
 const GL_MODELVIEW: u32 = 0x1700;
 const GL_PROJECTION: u32 = 0x1701;
 
@@ -172,18 +184,24 @@ pub extern "system" fn wglSwapBuffers(hdc: win32::HDC) -> win32::BOOL {
 }
 
 #[no_mangle]
-pub extern "system" fn glGetString(_name: u32) -> *const u8 {
+pub extern "system" fn glGetString(_name: GLenum) -> *const GLubyte {
     b"asdf\0".as_ptr()
 }
 
 #[no_mangle]
-pub extern "system" fn glBindTexture(_target: u32, _texture: u32) {}
+pub extern "system" fn glBindTexture(_target: GLenum, _texture: GLuint) {}
 
 #[no_mangle]
-pub extern "system" fn glClearColor(_red: f32, _green: f32, _blue: f32, _alpha: f32) {}
+pub extern "system" fn glClearColor(
+    _red: GLclampf,
+    _green: GLclampf,
+    _blue: GLclampf,
+    _alpha: GLclampf,
+) {
+}
 
 #[no_mangle]
-pub extern "system" fn glClear(_mask: u32) {
+pub extern "system" fn glClear(_mask: GLbitfield) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
         state.fb.as_mut().unwrap().clear();
@@ -191,57 +209,57 @@ pub extern "system" fn glClear(_mask: u32) {
 }
 
 #[no_mangle]
-pub extern "system" fn glCullFace(_mode: u32) {}
+pub extern "system" fn glCullFace(_mode: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glEnable(_cap: u32) {}
+pub extern "system" fn glEnable(_cap: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glDisable(_cap: u32) {}
+pub extern "system" fn glDisable(_cap: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glAlphaFunc(_func: u32, _ref: u32) {}
+pub extern "system" fn glAlphaFunc(_func: GLenum, _ref: GLclampf) {}
 
 #[no_mangle]
-pub extern "system" fn glBlendFunc(_sfactor: u32, _dfactor: u32) {}
+pub extern "system" fn glBlendFunc(_sfactor: GLenum, _dfactor: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glDepthFunc(_func: u32) {}
+pub extern "system" fn glDepthFunc(_func: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glDepthRange(_near_val: f64, _far_val: f64) {}
+pub extern "system" fn glDepthRange(_near_val: GLdouble, _far_val: GLdouble) {}
 
 #[no_mangle]
-pub extern "system" fn glDepthMask(_flag: bool) {}
+pub extern "system" fn glDepthMask(_flag: GLboolean) {}
 
 #[no_mangle]
-pub extern "system" fn glPolygonMode(_face: u32, _mode: u32) {}
+pub extern "system" fn glPolygonMode(_face: GLenum, _mode: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glShadeModel(_mode: u32) {}
+pub extern "system" fn glShadeModel(_mode: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glTexParameterf(_target: u32, _pname: u32, _param: f32) {}
+pub extern "system" fn glTexParameterf(_target: GLenum, _pname: GLenum, _param: GLfloat) {}
 
 #[no_mangle]
-pub extern "system" fn glTexEnvf(_target: u32, _pname: u32, _param: f32) {}
+pub extern "system" fn glTexEnvf(_target: GLenum, _pname: GLenum, _param: GLfloat) {}
 
 #[no_mangle]
 pub extern "system" fn glTexImage2D(
-    _target: u32,
-    _level: u32,
-    _internal_format: u32,
-    _width: u32,
-    _height: u32,
-    _border: u32,
-    _format: u32,
-    _type: u32,
-    _data: *const (),
+    _target: GLenum,
+    _level: GLint,
+    _internal_format: GLint,
+    _width: GLsizei,
+    _height: GLsizei,
+    _border: GLint,
+    _format: GLenum,
+    _type: GLenum,
+    _data: *const GLvoid,
 ) {
 }
 
 #[no_mangle]
-pub extern "system" fn glViewport(x: u32, y: u32, width: u32, height: u32) {
+pub extern "system" fn glViewport(x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
         state.viewport = Viewport {
@@ -254,7 +272,7 @@ pub extern "system" fn glViewport(x: u32, y: u32, width: u32, height: u32) {
 }
 
 #[no_mangle]
-pub extern "system" fn glMatrixMode(mode: u32) {
+pub extern "system" fn glMatrixMode(mode: GLenum) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
         state.matrix_mode = match mode {
@@ -280,12 +298,12 @@ pub extern "system" fn glLoadIdentity() {
 
 #[no_mangle]
 pub extern "system" fn glOrtho(
-    left: f64,
-    right: f64,
-    bottom: f64,
-    top: f64,
-    near_val: f64,
-    far_val: f64,
+    left: GLdouble,
+    right: GLdouble,
+    bottom: GLdouble,
+    top: GLdouble,
+    near_val: GLdouble,
+    far_val: GLdouble,
 ) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
@@ -312,12 +330,12 @@ pub extern "system" fn glOrtho(
 
 #[no_mangle]
 pub extern "system" fn glFrustum(
-    left: f64,
-    right: f64,
-    bottom: f64,
-    top: f64,
-    near_val: f64,
-    far_val: f64,
+    left: GLdouble,
+    right: GLdouble,
+    bottom: GLdouble,
+    top: GLdouble,
+    near_val: GLdouble,
+    far_val: GLdouble,
 ) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
@@ -343,16 +361,16 @@ pub extern "system" fn glFrustum(
 }
 
 #[no_mangle]
-pub extern "system" fn glColor3f(_red: f32, _green: f32, _blue: f32) {}
+pub extern "system" fn glColor3f(_red: GLfloat, _green: GLfloat, _blue: GLfloat) {}
 
 #[no_mangle]
-pub extern "system" fn glColor3ubv(_v: *const u8) {}
+pub extern "system" fn glColor3ubv(_v: *const GLubyte) {}
 
 #[no_mangle]
-pub extern "system" fn glColor4f(_red: f32, _green: f32, _blue: f32, _alpha: f32) {}
+pub extern "system" fn glColor4f(_red: GLfloat, _green: GLfloat, _blue: GLfloat, _alpha: GLfloat) {}
 
 #[no_mangle]
-pub extern "system" fn glColor4fv(_v: *const f32) {}
+pub extern "system" fn glColor4fv(_v: *const GLfloat) {}
 
 #[no_mangle]
 pub extern "system" fn glBegin(mode: PrimitiveMode) {
@@ -425,10 +443,10 @@ pub extern "system" fn glEnd() {
 }
 
 #[no_mangle]
-pub extern "system" fn glTexCoord2f(_s: f32, _t: f32) {}
+pub extern "system" fn glTexCoord2f(_s: GLfloat, _t: GLfloat) {}
 
 #[no_mangle]
-pub extern "system" fn glVertex2f(x: f32, y: f32) {
+pub extern "system" fn glVertex2f(x: GLfloat, y: GLfloat) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
         state
@@ -439,7 +457,7 @@ pub extern "system" fn glVertex2f(x: f32, y: f32) {
 }
 
 #[no_mangle]
-pub extern "system" fn glVertex3f(x: f32, y: f32, z: f32) {
+pub extern "system" fn glVertex3f(x: GLfloat, y: GLfloat, z: GLfloat) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
         state
@@ -450,7 +468,7 @@ pub extern "system" fn glVertex3f(x: f32, y: f32, z: f32) {
 }
 
 #[no_mangle]
-pub extern "system" fn glVertex3fv(v: &[f32; 3]) {
+pub extern "system" fn glVertex3fv(v: &[GLfloat; 3]) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
         state
@@ -461,10 +479,10 @@ pub extern "system" fn glVertex3fv(v: &[f32; 3]) {
 }
 
 #[no_mangle]
-pub extern "system" fn glDrawBuffer(_buf: u32) {}
+pub extern "system" fn glDrawBuffer(_buf: GLenum) {}
 
 #[no_mangle]
-pub extern "system" fn glRotatef(angle: f32, x: f32, y: f32, z: f32) {
+pub extern "system" fn glRotatef(angle: GLfloat, x: GLfloat, y: GLfloat, z: GLfloat) {
     // TODO maybe make sure i can derive this
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
@@ -502,7 +520,7 @@ pub extern "system" fn glRotatef(angle: f32, x: f32, y: f32, z: f32) {
 }
 
 #[no_mangle]
-pub extern "system" fn glTranslatef(x: f32, y: f32, z: f32) {
+pub extern "system" fn glTranslatef(x: GLfloat, y: GLfloat, z: GLfloat) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
 
@@ -520,7 +538,7 @@ pub extern "system" fn glTranslatef(x: f32, y: f32, z: f32) {
 }
 
 #[no_mangle]
-pub extern "system" fn glScalef(x: f32, y: f32, z: f32) {
+pub extern "system" fn glScalef(x: GLfloat, y: GLfloat, z: GLfloat) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
 
@@ -538,7 +556,7 @@ pub extern "system" fn glScalef(x: f32, y: f32, z: f32) {
 }
 
 #[no_mangle]
-pub extern "system" fn glGetFloatv(_pname: u32, _params: *mut f32) {}
+pub extern "system" fn glGetFloatv(_pname: GLenum, _params: *mut GLfloat) {}
 
 #[no_mangle]
 pub extern "system" fn glPushMatrix() {
@@ -566,14 +584,14 @@ pub extern "system" fn glPopMatrix() {
 
 #[no_mangle]
 pub extern "system" fn glTexSubImage2D(
-    _target: u32,
-    _level: u32,
-    _xoffset: u32,
-    _yoffset: u32,
-    _width: u32,
-    _height: u32,
-    _format: u32,
-    _type: u32,
-    _pixels: *const (),
+    _target: GLenum,
+    _level: GLint,
+    _xoffset: GLint,
+    _yoffset: GLint,
+    _width: GLsizei,
+    _height: GLsizei,
+    _format: GLenum,
+    _type: GLenum,
+    _pixels: *const c_void,
 ) {
 }
