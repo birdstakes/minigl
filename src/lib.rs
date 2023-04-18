@@ -4,7 +4,7 @@ mod win32;
 
 use std::{cell::RefCell, ffi::c_void};
 
-use math::{Mat4, Vec4};
+use math::{Mat4, Vec3, Vec4};
 use rasterize::Framebuffer;
 
 #[derive(Default)]
@@ -386,32 +386,34 @@ pub extern "system" fn glEnd() {
             vert.y = (vert.y + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
         }
 
+        let shader = |bary: Vec3| bary;
+
         match state.current_primitive.mode {
             PrimitiveMode::Triangles => {
                 for i in (0..verts.len()).step_by(3) {
                     let tri = &verts[i..i + 3];
-                    fb.draw_triangle([tri[0], tri[1], tri[2]])
+                    fb.draw_triangle([tri[0], tri[1], tri[2]], shader)
                 }
             }
             PrimitiveMode::Quads => {
                 for i in (0..verts.len()).step_by(4) {
                     let quad = &verts[i..i + 4];
-                    fb.draw_triangle([quad[0], quad[1], quad[2]]);
-                    fb.draw_triangle([quad[2], quad[3], quad[0]]);
+                    fb.draw_triangle([quad[0], quad[1], quad[2]], shader);
+                    fb.draw_triangle([quad[2], quad[3], quad[0]], shader);
                 }
             }
             PrimitiveMode::TriangleStrip => {
                 for i in 0..verts.len() - 2 {
                     if i % 2 == 0 {
-                        fb.draw_triangle([verts[i], verts[i + 1], verts[i + 2]]);
+                        fb.draw_triangle([verts[i], verts[i + 1], verts[i + 2]], shader);
                     } else {
-                        fb.draw_triangle([verts[i + 1], verts[i], verts[i + 2]]);
+                        fb.draw_triangle([verts[i + 1], verts[i], verts[i + 2]], shader);
                     }
                 }
             }
             PrimitiveMode::TriangleFan | PrimitiveMode::Polygon => {
                 for i in 1..verts.len() - 1 {
-                    fb.draw_triangle([verts[0], verts[i], verts[i + 1]]);
+                    fb.draw_triangle([verts[0], verts[i], verts[i + 1]], shader);
                 }
             }
             _ => todo!(),
