@@ -7,6 +7,9 @@ use std::{cell::RefCell, ffi::c_void};
 use math::{Mat4, Vec3, Vec4};
 use rasterize::Framebuffer;
 
+const GL_MODELVIEW: u32 = 0x1700;
+const GL_PROJECTION: u32 = 0x1701;
+
 #[derive(Default)]
 struct Viewport {
     x: f32,
@@ -255,8 +258,8 @@ pub extern "system" fn glMatrixMode(mode: u32) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
         state.matrix_mode = match mode {
-            0x1700 => MatrixMode::ModelView,
-            0x1701 => MatrixMode::Projection,
+            GL_MODELVIEW => MatrixMode::ModelView,
+            GL_PROJECTION => MatrixMode::Projection,
             _ => todo!(),
         };
     })
