@@ -4,7 +4,7 @@ mod win32;
 
 use std::{cell::RefCell, ffi::c_void};
 
-use math::{Mat4, Vec3, Vec4};
+use math::{Mat4, Vec4};
 use rasterize::Framebuffer;
 
 type GLenum = std::ffi::c_uint;
@@ -19,8 +19,14 @@ type GLclampf = std::ffi::c_float;
 type GLdouble = std::ffi::c_double;
 type GLvoid = std::ffi::c_void;
 
-const GL_MODELVIEW: u32 = 0x1700;
-const GL_PROJECTION: u32 = 0x1701;
+const GL_TEXTURE_2D: GLenum = 0x0de1;
+const GL_UNSIGNED_BYTE: GLenum = 0x1401;
+const GL_MODELVIEW: GLenum = 0x1700;
+const GL_PROJECTION: GLenum = 0x1701;
+const GL_RGB: GLenum = 0x1907;
+const GL_RGBA: GLenum = 0x1908;
+const GL_LUMINANCE: GLenum = 0x1909;
+const GL_LUMINANCE_ALPHA: GLenum = 0x190a;
 
 #[derive(Default)]
 struct Viewport {
@@ -30,12 +36,22 @@ struct Viewport {
     height: f32,
 }
 
+#[derive(Default)]
+struct Texture {
+    width: usize,
+    height: usize,
+    data: Vec<Vec4>,
+}
+
 struct GLState {
     fb: Option<Framebuffer>,
     matrix_mode: MatrixMode,
     matrix_stacks: [Vec<Mat4>; NUM_MATRIX_MODES],
     viewport: Viewport,
-    current_primitive: Primitive,
+    primitive: Primitive,
+    tex_coord: Vec4,
+    bound_texture: usize,
+    textures: Vec<Texture>,
     bmi: win32::BITMAPINFOHEADER,
 }
 
@@ -46,7 +62,10 @@ impl Default for GLState {
             matrix_mode: MatrixMode::ModelView,
             matrix_stacks: [vec![Mat4::identity()], vec![Mat4::identity()]],
             viewport: Default::default(),
-            current_primitive: Default::default(),
+            primitive: Default::default(),
+            tex_coord: Vec4::new(0.0, 0.0, 0.0, 1.0),
+            bound_texture: 0,
+            textures: vec![Default::default()],
             bmi: Default::default(),
         }
     }
@@ -84,7 +103,13 @@ pub enum PrimitiveMode {
 #[derive(Default)]
 struct Primitive {
     mode: PrimitiveMode,
-    vertices: Vec<Vec4>,
+    vertices: Vec<Vertex>,
+}
+
+#[derive(Clone, Copy)]
+struct Vertex {
+    position: Vec4,
+    tex_coord: Vec4,
 }
 
 #[no_mangle]
@@ -189,9 +214,6 @@ pub extern "system" fn glGetString(_name: GLenum) -> *const GLubyte {
 }
 
 #[no_mangle]
-pub extern "system" fn glBindTexture(_target: GLenum, _texture: GLuint) {}
-
-#[no_mangle]
 pub extern "system" fn glClearColor(
     _red: GLclampf,
     _green: GLclampf,
@@ -245,17 +267,84 @@ pub extern "system" fn glTexParameterf(_target: GLenum, _pname: GLenum, _param: 
 pub extern "system" fn glTexEnvf(_target: GLenum, _pname: GLenum, _param: GLfloat) {}
 
 #[no_mangle]
+pub extern "system" fn glBindTexture(_target: GLenum, texture: GLuint) {
+    GL_STATE.with(|state| {
+        let state = &mut *state.borrow_mut();
+        state.bound_texture = texture as usize;
+        if state.bound_texture >= state.textures.len() {
+            state
+                .textures
+                .resize_with(state.bound_texture + 1, Default::default)
+        }
+    });
+}
+
+#[no_mangle]
 pub extern "system" fn glTexImage2D(
-    _target: GLenum,
-    _level: GLint,
-    _internal_format: GLint,
-    _width: GLsizei,
-    _height: GLsizei,
+    target: GLenum,
+    level: GLint,
+    internal_format: GLint,
+    width: GLsizei,
+    height: GLsizei,
     _border: GLint,
-    _format: GLenum,
-    _type: GLenum,
-    _data: *const GLvoid,
+    format: GLenum,
+    type_: GLenum,
+    data: *const GLvoid,
 ) {
+    GL_STATE.with(|state| {
+        let state = &mut *state.borrow_mut();
+
+        let internal_format = match internal_format {
+            1 => GL_LUMINANCE,
+            2 => GL_LUMINANCE_ALPHA,
+            3 => GL_RGB,
+            4 => GL_RGBA,
+            _ => internal_format as GLenum,
+        };
+
+        // we only care about what quake uses (for now, at least)
+        assert!(target == GL_TEXTURE_2D);
+        assert!(
+            internal_format == GL_RGB
+                || internal_format == GL_RGBA
+                || internal_format == GL_LUMINANCE
+        );
+        assert!(format == GL_RGBA || format == GL_LUMINANCE);
+        assert_eq!(type_, GL_UNSIGNED_BYTE);
+
+        if format != GL_RGBA || level != 0 {
+            return;
+        }
+
+        let texture = &mut state.textures[state.bound_texture];
+        texture.width = width as usize;
+        texture.height = height as usize;
+        texture
+            .data
+            .resize_with(texture.width * texture.height, Default::default);
+
+        if !data.is_null() {
+            let data = unsafe {
+                std::slice::from_raw_parts(
+                    data as *const GLubyte,
+                    width as usize * height as usize * 4,
+                )
+            };
+
+            for y in 0..height {
+                for x in 0..width {
+                    let index = ((x + y * width) * 4) as usize;
+                    let color = Vec4::new(
+                        data[index] as f32 / 256.0,
+                        data[index + 1] as f32 / 256.0,
+                        data[index + 2] as f32 / 256.0,
+                        data[index + 3] as f32 / 256.0,
+                    );
+                    texture.data[(x + y * width) as usize] = color;
+                }
+            }
+        }
+    });
 }
 
 #[no_mangle]
@@ -376,8 +465,8 @@ pub extern "system" fn glColor4fv(_v: *const GLfloat) {}
 pub extern "system" fn glBegin(mode: PrimitiveMode) {
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
-        state.current_primitive.mode = mode;
-        state.current_primitive.vertices.clear();
+        state.primitive.mode = mode;
+        state.primitive.vertices.clear();
     });
 }
 
@@ -386,95 +475,117 @@ pub extern "system" fn glEnd() {
     GL_STATE.with(|state| {
         let state = &mut *state.borrow_mut();
         let fb = state.fb.as_mut().unwrap();
-        let verts = &mut state.current_primitive.vertices;
+        let verts = &mut state.primitive.vertices;
 
         for vert in verts.iter_mut() {
-            *vert = *state.matrix_stacks[MatrixMode::Projection as usize]
+            vert.position = *state.matrix_stacks[MatrixMode::Projection as usize]
                 .last()
                 .unwrap()
                 * *state.matrix_stacks[MatrixMode::ModelView as usize]
                     .last()
                     .unwrap()
-                * *vert;
+                * vert.position;
 
-            if vert.w > 0.0 {
-                vert.x /= vert.w;
-                vert.y /= vert.w;
-                vert.z /= vert.w;
+            if vert.position.w > 0.0 {
+                vert.position.x /= vert.position.w;
+                vert.position.y /= vert.position.w;
+                vert.position.z /= vert.position.w;
             }
 
-            vert.x = (vert.x + 1.0) * state.viewport.width * 0.5 + state.viewport.x;
-            vert.y = (vert.y + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
+            vert.position.x =
+                (vert.position.x + 1.0) * state.viewport.width * 0.5 + state.viewport.x;
+            vert.position.y =
+                (vert.position.y + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
         }
 
-        let shader = |bary: Vec3| bary;
+        let mut tris = vec![];
 
-        match state.current_primitive.mode {
+        match state.primitive.mode {
             PrimitiveMode::Triangles => {
                 for i in (0..verts.len()).step_by(3) {
-                    let tri = &verts[i..i + 3];
-                    fb.draw_triangle([tri[0], tri[1], tri[2]], shader)
+                    tris.push([verts[i], verts[i + 1], verts[i + 2]]);
                 }
             }
+
             PrimitiveMode::Quads => {
                 for i in (0..verts.len()).step_by(4) {
-                    let quad = &verts[i..i + 4];
-                    fb.draw_triangle([quad[0], quad[1], quad[2]], shader);
-                    fb.draw_triangle([quad[2], quad[3], quad[0]], shader);
+                    tris.push([verts[i], verts[i + 1], verts[i + 2]]);
+                    tris.push([verts[i + 2], verts[i + 3], verts[i]]);
                 }
             }
+
             PrimitiveMode::TriangleStrip => {
                 for i in 0..verts.len() - 2 {
                     if i % 2 == 0 {
-                        fb.draw_triangle([verts[i], verts[i + 1], verts[i + 2]], shader);
+                        tris.push([verts[i], verts[i + 1], verts[i + 2]]);
                     } else {
-                        fb.draw_triangle([verts[i + 1], verts[i], verts[i + 2]], shader);
+                        tris.push([verts[i + 1], verts[i], verts[i + 2]]);
                     }
                 }
             }
+
             PrimitiveMode::TriangleFan | PrimitiveMode::Polygon => {
                 for i in 1..verts.len() - 1 {
-                    fb.draw_triangle([verts[0], verts[i], verts[i + 1]], shader);
+                    tris.push([verts[0], verts[i], verts[i + 1]]);
                 }
             }
+
             _ => todo!(),
+        }
+
+        let texture = &state.textures[state.bound_texture];
+
+        for tri in &tris {
+            fb.draw_triangle(
+                [tri[0].position, tri[1].position, tri[2].position],
+                |bary| {
+                    if texture.width == 0 || texture.height == 0 {
+                        return bary;
+                    }
+                    let uv = bary[0] * tri[0].tex_coord
+                        + bary[1] * tri[1].tex_coord
+                        + bary[2] * tri[2].tex_coord;
+                    let x = (uv[0].rem_euclid(1.0) * texture.width as f32) as usize % texture.width;
+                    let y =
+                        (uv[1].rem_euclid(1.0) * texture.height as f32) as usize % texture.height;
+                    texture.data[x + y * texture.width].xyz()
+                },
+            );
         }
     })
 }
 
 #[no_mangle]
-pub extern "system" fn glTexCoord2f(_s: GLfloat, _t: GLfloat) {}
+pub extern "system" fn glTexCoord2f(s: GLfloat, t: GLfloat) {
+    GL_STATE.with(|state| {
+        let state = &mut *state.borrow_mut();
+        state.tex_coord = Vec4::new(s, t, 0.0, 1.0);
+    })
+}
 
 #[no_mangle]
 pub extern "system" fn glVertex2f(x: GLfloat, y: GLfloat) {
-    GL_STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        state
-            .current_primitive
-            .vertices
-            .push(Vec4::new(x, y, 0.0, 1.0));
-    });
+    glVertex4f(x, y, 0.0, 1.0);
 }
 
 #[no_mangle]
 pub extern "system" fn glVertex3f(x: GLfloat, y: GLfloat, z: GLfloat) {
-    GL_STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        state
-            .current_primitive
-            .vertices
-            .push(Vec4::new(x, y, z, 1.0));
-    });
+    glVertex4f(x, y, z, 1.0);
 }
 
 #[no_mangle]
 pub extern "system" fn glVertex3fv(v: &[GLfloat; 3]) {
+    glVertex4f(v[0], v[1], v[2], 1.0);
+}
+
+#[no_mangle]
+pub extern "system" fn glVertex4f(x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
     GL_STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        state
-            .current_primitive
-            .vertices
-            .push(Vec4::new(v[0], v[1], v[2], 1.0));
+        let state = &mut *state.borrow_mut();
+        state.primitive.vertices.push(Vertex {
+            position: Vec4::new(x, y, z, w),
+            tex_coord: state.tex_coord,
+        });
     });
 }
 

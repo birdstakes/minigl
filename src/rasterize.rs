@@ -31,31 +31,6 @@ impl Framebuffer {
         }
     }
 
-    pub fn draw_line(&mut self, mut sx: f32, mut sy: f32, mut ex: f32, mut ey: f32) {
-        let (dx, dy) = (ex - sx, ey - sy);
-        if dx.abs() > dy.abs() {
-            if dx < 0.0 {
-                std::mem::swap(&mut sx, &mut ex);
-                std::mem::swap(&mut sy, &mut ey);
-            }
-            let mut y = sy;
-            for x in sx as i32..ex as i32 {
-                self.draw_pixel(x, y as i32, [0xff, 0xff, 0xff]);
-                y += (ey - sy) / (ex - sx);
-            }
-        } else {
-            if dy < 0.0 {
-                std::mem::swap(&mut sx, &mut ex);
-                std::mem::swap(&mut sy, &mut ey);
-            }
-            let mut x = sx;
-            for y in sy as i32..ey as i32 {
-                self.draw_pixel(x as i32, y, [0xff, 0xff, 0xff]);
-                x += (ex - sx) / (ey - sy);
-            }
-        }
-    }
-
     pub fn draw_triangle<F>(&mut self, verts: [Vec4; 3], shader: F)
     where
         F: Fn(Vec3) -> Vec3,
@@ -80,6 +55,7 @@ impl Framebuffer {
 
         // TODO should this be w instead of z?
         let (ooza, oozb, oozc) = (1.0 / verts[0].z, 1.0 / verts[1].z, 1.0 / verts[2].z);
+        let (oowa, oowb, oowc) = (1.0 / verts[0].w, 1.0 / verts[1].w, 1.0 / verts[2].w);
         let (a, b, c) = (verts[0].xy(), verts[1].xy(), verts[2].xy());
         let invarea = 1.0 / (b - a).perp().dot(c - a);
 
@@ -93,13 +69,14 @@ impl Framebuffer {
                 );
                 if bary[0] >= 0.0 && bary[1] >= 0.0 && bary[2] >= 0.0 {
                     let z = 1.0 / (bary[0] * ooza + bary[1] * oozb + bary[2] * oozc);
+                    let w = 1.0 / (bary[0] * oowa + bary[1] * oowb + bary[2] * oowc);
                     if z < self.z_buffer[x as usize + y as usize * self.width] {
                         self.z_buffer[x as usize + y as usize * self.width] = z;
 
                         // correct for perspective
                         // TODO understand this better
                         // TODO why does doing this break menus?
-                        let bary = Vec3::new(bary[0] * ooza, bary[1] * oozb, bary[2] * oozc) * z;
+                        let bary = Vec3::new(bary[0] * oowa, bary[1] * oowb, bary[2] * oowc) * w;
 
                         let color = shader(bary) * 256.0;
                         self.draw_pixel(x, y, [color[0] as u8, color[1] as u8, color[2] as u8]);
@@ -107,9 +84,5 @@ impl Framebuffer {
                 }
             }
         }
-
-        // self.draw_line(verts[0].x, verts[0].y, verts[1].x, verts[1].y);
-        // self.draw_line(verts[1].x, verts[1].y, verts[2].x, verts[2].y);
-        // self.draw_line(verts[2].x, verts[2].y, verts[0].x, verts[0].y);
     }
 }
