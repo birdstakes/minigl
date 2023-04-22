@@ -53,7 +53,6 @@ impl Framebuffer {
         max_x = (max_x + 1).clamp(0, self.width as i32);
         max_y = (max_y + 1).clamp(0, self.height as i32);
 
-        // TODO should this be w instead of z?
         let (ooza, oozb, oozc) = (1.0 / verts[0].z, 1.0 / verts[1].z, 1.0 / verts[2].z);
         let (oowa, oowb, oowc) = (1.0 / verts[0].w, 1.0 / verts[1].w, 1.0 / verts[2].w);
         let (a, b, c) = (verts[0].xy(), verts[1].xy(), verts[2].xy());

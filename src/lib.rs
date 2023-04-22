@@ -403,7 +403,6 @@ pub extern "system" fn glOrtho(
             let (left, right) = (left as f32, right as f32);
             let (bottom, top) = (bottom as f32, top as f32);
             let (near_val, far_val) = (near_val as f32, far_val as f32);
-            // TODO learn why this is what it is
             let (rpl, rml) = (right + left, right - left);
             let (tpb, tmb) = (top + bottom, top - bottom);
             let (fpn, fmn) = (far_val + near_val, far_val - near_val);
@@ -435,7 +434,6 @@ pub extern "system" fn glFrustum(
             let (left, right) = (left as f32, right as f32);
             let (bottom, top) = (bottom as f32, top as f32);
             let (near_val, far_val) = (near_val as f32, far_val as f32);
-            // TODO review why this is what it is
             let (rpl, rml) = (right + left, right - left);
             let (tpb, tmb) = (top + bottom, top - bottom);
             let (fpn, fmn) = (far_val + near_val, far_val - near_val);
@@ -594,7 +592,6 @@ pub extern "system" fn glDrawBuffer(_buf: GLenum) {}
 
 #[no_mangle]
 pub extern "system" fn glRotatef(angle: GLfloat, x: GLfloat, y: GLfloat, z: GLfloat) {
-    // TODO maybe make sure i can derive this
     GL_STATE.with(|state| {
         let mut state = state.borrow_mut();
 
