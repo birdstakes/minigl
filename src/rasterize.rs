@@ -72,7 +72,7 @@ impl Framebuffer {
                         // TODO why does doing this break menus?
                         let bary = Vec3::new(bary[0] * oowa, bary[1] * oowb, bary[2] * oowc) * w;
 
-                        let color = shader(bary) * 256.0;
+                        let color = shader(bary) * 255.0;
                         self.draw_pixel(x, y, [color[0] as u8, color[1] as u8, color[2] as u8]);
                     }
                 }
