@@ -35,11 +35,6 @@ impl Framebuffer {
     where
         F: Fn(Vec3) -> Vec3,
     {
-        // for now just skip anything that isn't completely in front of the camera
-        if verts.iter().any(|vert| vert.w <= 0.1) {
-            return;
-        }
-
         let (mut min_x, mut min_y) = (self.width as i32, self.height as i32);
         let (mut max_x, mut max_y) = (0, 0);
         for vert in verts {

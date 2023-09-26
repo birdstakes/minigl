@@ -472,68 +472,122 @@ pub extern "system" fn glBegin(mode: PrimitiveMode) {
 pub extern "system" fn glEnd() {
     GL_STATE.with(|state| {
         let state = &mut *state.borrow_mut();
-        let fb = state.fb.as_mut().unwrap();
         let verts = &mut state.primitive.vertices;
 
-        for vert in verts.iter_mut() {
-            vert.position = *state.matrix_stacks[MatrixMode::Projection as usize]
+        let m = *state.matrix_stacks[MatrixMode::Projection as usize]
+            .last()
+            .unwrap()
+            * *state.matrix_stacks[MatrixMode::ModelView as usize]
                 .last()
-                .unwrap()
-                * *state.matrix_stacks[MatrixMode::ModelView as usize]
-                    .last()
-                    .unwrap()
-                * vert.position;
+                .unwrap();
 
-            if vert.position.w > 0.0 {
-                vert.position.x /= vert.position.w;
-                vert.position.y /= vert.position.w;
-                vert.position.z /= vert.position.w;
-            }
+        verts
+            .iter_mut()
+            .for_each(|vert| vert.position = m * vert.position);
 
-            vert.position.x =
-                (vert.position.x + 1.0) * state.viewport.width * 0.5 + state.viewport.x;
-            vert.position.y =
-                (vert.position.y + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
-        }
-
-        let mut tris = vec![];
+        let mut polys = vec![];
 
         match state.primitive.mode {
             PrimitiveMode::Triangles => {
                 for i in (0..verts.len()).step_by(3) {
-                    tris.push([verts[i], verts[i + 1], verts[i + 2]]);
+                    polys.push(vec![verts[i], verts[i + 1], verts[i + 2]]);
                 }
             }
 
             PrimitiveMode::Quads => {
                 for i in (0..verts.len()).step_by(4) {
-                    tris.push([verts[i], verts[i + 1], verts[i + 2]]);
-                    tris.push([verts[i + 2], verts[i + 3], verts[i]]);
+                    polys.push(vec![verts[i], verts[i + 1], verts[i + 2]]);
+                    polys.push(vec![verts[i + 2], verts[i + 3], verts[i]]);
                 }
             }
 
             PrimitiveMode::TriangleStrip => {
                 for i in 0..verts.len() - 2 {
                     if i % 2 == 0 {
-                        tris.push([verts[i], verts[i + 1], verts[i + 2]]);
+                        polys.push(vec![verts[i], verts[i + 1], verts[i + 2]]);
                     } else {
-                        tris.push([verts[i + 1], verts[i], verts[i + 2]]);
+                        polys.push(vec![verts[i + 1], verts[i], verts[i + 2]]);
                     }
                 }
             }
 
-            PrimitiveMode::TriangleFan | PrimitiveMode::Polygon => {
+            PrimitiveMode::TriangleFan => {
                 for i in 1..verts.len() - 1 {
-                    tris.push([verts[0], verts[i], verts[i + 1]]);
+                    polys.push(vec![verts[0], verts[i], verts[i + 1]]);
                 }
+            }
+
+            PrimitiveMode::Polygon => {
+                polys.push(verts.clone());
             }
 
             _ => todo!(),
         }
 
-        let texture = &state.textures[state.bound_texture];
+        // TODO simplify clipping
+        // there is no need to actually compute full dot products for this
+        // maybe check out blinn's homogeneous clipping paper
+        let planes = [
+            Vec4::new(1.0, 0.0, 0.0, 1.0).normalized(),
+            Vec4::new(-1.0, 0.0, 0.0, 1.0).normalized(),
+            Vec4::new(0.0, 1.0, 0.0, 1.0).normalized(),
+            Vec4::new(0.0, -1.0, 0.0, 1.0).normalized(),
+            Vec4::new(0.0, 0.0, 1.0, 1.0).normalized(),
+            Vec4::new(0.0, 0.0, -1.0, 1.0).normalized(),
+        ];
 
-        for tri in &tris {
+        let mut clipped_polys = vec![];
+
+        for poly in polys {
+            let mut poly = poly;
+            for &plane in &planes {
+                let mut clipped_poly = vec![];
+                for i in 0..poly.len() {
+                    let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+                    let a_dot = a.position.dot(plane);
+                    let b_dot = b.position.dot(plane);
+                    if a_dot > 0.0 {
+                        clipped_poly.push(a);
+                    }
+                    if a_dot.signum() != b_dot.signum() {
+                        let t = -a_dot / (b_dot - a_dot);
+                        let v = a.position + t * (b.position - a.position);
+                        let uv = a.tex_coord + t * (b.tex_coord - a.tex_coord);
+                        clipped_poly.push(Vertex {
+                            position: v,
+                            tex_coord: uv,
+                        });
+                    }
+                }
+                poly = clipped_poly;
+            }
+            clipped_polys.push(poly);
+        }
+
+        let mut tris = vec![];
+        for poly in clipped_polys {
+            if poly.len() >= 3 {
+                for i in 1..poly.len() - 1 {
+                    tris.push([poly[0], poly[i], poly[i + 1]]);
+                }
+            }
+        }
+
+        for tri in &mut tris {
+            for vert in tri.iter_mut() {
+                vert.position.x /= vert.position.w;
+                vert.position.y /= vert.position.w;
+                vert.position.z /= vert.position.w;
+
+                vert.position.x =
+                    (vert.position.x + 1.0) * state.viewport.width * 0.5 + state.viewport.x;
+                vert.position.y =
+                    (vert.position.y + 1.0) * state.viewport.height * 0.5 + state.viewport.y;
+            }
+
+            let fb = state.fb.as_mut().unwrap();
+            let texture = &state.textures[state.bound_texture];
+
             fb.draw_triangle(
                 [tri[0].position, tri[1].position, tri[2].position],
                 |bary| {
